@@ -1,0 +1,64 @@
+agent:
+  device_id: "device-1234"
+  location: "rack1A"
+  log_level: "INFO"
+  collection_interval_seconds: 30
+  max_parallel_plugins: 4
+  reliability:
+    restart_plugins_on_failure: true
+    plugin_isolation: true
+
+metrics:
+  - name: system_memory
+    enabled: true
+    plugin: proc
+    params: {}
+  - name: process_memory
+    enabled: true
+    plugin: proc
+    params:
+      process_whitelist: ["nginx", "mysql"]
+      include_kernel_threads: false
+  - name: cpu_usage
+    enabled: true
+    plugin: proc
+    params: {}
+  - name: gpu_memory
+    enabled: false
+    plugin: soc
+    params:
+      type: amlogic
+  - name: cma_regions
+    enabled: false
+    plugin: soc
+    params: {}
+  - name: memory_bandwidth
+    enabled: false
+    plugin: soc
+    params:
+      type: amlogic
+  - name: container_memory
+    enabled: false
+    plugin: container
+    params: {}
+
+exporters:
+  - type: html_report
+    enabled: true
+    output_dir: "/tmp/perfsight"
+  - type: json
+    enabled: true
+    output_dir: "/tmp/perfsight/json"
+  - type: csv
+    enabled: false
+    output_dir: "/tmp/perfsight/csv"
+
+# Future exporters (not yet implemented, but designed for easy integration)
+prometheus:
+  enabled: false
+
+api:
+  enabled: false
+
+healthcheck:
+  enabled: false
