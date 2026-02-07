@@ -27,8 +27,8 @@ perfSight follows a modular, plugin-based architecture:
 │                Metrics Aggregator                    │
 ├──────────────────────────────────────────────────────┤
 │   Metric Plugins          │    Output Exporters      │
-│   • ProcMetrics           │    • HTML Reporter       │
-│   • SoCMetrics            │    • JSON Exporter       │
+│   • SystemMetrics         │    • HTML Reporter       │
+│   • ProcMetrics           │    • JSON Exporter       │
 │   • ContainerMetrics      │    • CSV Exporter        │
 │   • Custom Plugins...     │    • Custom Exporters... │
 └──────────────────────────────────────────────────────┘
@@ -88,75 +88,54 @@ perfSight uses a YAML configuration file for all settings. See `perfsight.conf.y
 
 ```yaml
 agent:
-  device_id: "device-1234"           # Unique device identifier
-  location: "rack1A"                 # Physical location
-  log_level: "INFO"                  # DEBUG, INFO, WARNING, ERROR
-  collection_interval_seconds: 30    # How often to collect metrics
-  max_parallel_plugins: 4            # Max concurrent plugin execution
+  device_id: "device-1234"              # Unique device identifier
+  location: "rack1A"                    # Physical location
+  log_level: "INFO"                     # DEBUG, INFO, WARNING, ERROR
+  collection_interval_seconds: 30       # How often to collect metrics
+  collection_iteration: 0               # Number of iterations (0 = run indefinitely)
+  max_parallel_plugins: 4               # Max concurrent plugin execution
   reliability:
-    restart_plugins_on_failure: true # Auto-restart failed plugins
-    plugin_isolation: true           # Isolate plugin failures
+    restart_plugins_on_failure: true    # Auto-restart failed plugins
+    plugin_isolation: true              # Isolate plugin failures
 ```
 
 ### Metric Plugins
 
-#### Proc Metrics Plugin
+#### System Metrics Plugin
 
-Collects system and process metrics from `/proc` filesystem:
+Collects system-wide metrics from `/proc` filesystem:
 
 ```yaml
 metrics:
-  - name: system_memory
+  - name: system_metrics
     enabled: true
-    plugin: proc
+    plugin: system
     params: {}
-    
-  - name: process_memory
+```
+
+**Collected Metrics:**
+- **Memory** (from `/proc/meminfo`): Total, Free, Available, Buffers, Cached, Swap
+- **CPU** (from `/proc/stat`): User, System, Nice, Idle, I/O wait, IRQ, Soft IRQ times
+- **Memory Fragmentation** (from `/proc/buddyinfo`): Free pages per order for each zone
+
+#### Process Metrics Plugin
+
+Collects per-process metrics from `/proc/[pid]/` filesystem:
+
+```yaml
+metrics:
+  - name: process_metrics
     enabled: true
     plugin: proc
     params:
       process_whitelist: ["nginx", "mysql"]  # Monitor specific processes
       include_kernel_threads: false
-      
-  - name: cpu_usage
-    enabled: true
-    plugin: proc
-    params: {}
 ```
 
-**Collected Metrics:**
-- System memory: Total, Free, Available, Buffers, Cached, Swap
-- Process memory: VmRSS, VmSize per process
-- CPU usage: User, System, Idle, I/O wait times
-
-#### SoC Metrics Plugin
-
-Collects SoC-specific metrics (GPU, CMA, bandwidth):
-
-```yaml
-metrics:
-  - name: gpu_memory
-    enabled: true
-    plugin: soc
-    params:
-      type: amlogic  # Supported: amlogic, broadcom, realtek
-      
-  - name: cma_regions
-    enabled: true
-    plugin: soc
-    params: {}
-    
-  - name: memory_bandwidth
-    enabled: true
-    plugin: soc
-    params:
-      type: amlogic
-```
-
-**Supported SoCs:**
-- Amlogic (S905, S912, etc.)
-- Broadcom (BCM2711, etc.)
-- Realtek (RTD1295, etc.)
+**Collected Metrics** (per process):
+- **Process Stats** (from `/proc/[pid]/stat`): State, CPU times (user/system), thread count, virtual/resident memory
+- **Process Status** (from `/proc/[pid]/status`): VmRSS, VmSize, VmPeak, VmHWM
+- **Memory Maps** (from `/proc/[pid]/smaps`): PSS (Proportional Set Size), Private/Shared Clean/Dirty memory
 
 #### Container Metrics Plugin
 
@@ -224,22 +203,47 @@ healthcheck:
 | Cached | kB | Page cache |
 | SwapTotal | kB | Total swap space |
 | SwapFree | kB | Available swap |
+| SwapCached | kB | Swap cached |
+| Active | kB | Active memory |
+| Inactive | kB | Inactive memory |
 
 ### CPU Metrics
 
 | Metric | Unit | Description |
 |--------|------|-------------|
 | cpu_user | jiffies | Time in user mode |
+| cpu_nice | jiffies | Time in user mode with low priority |
 | cpu_system | jiffies | Time in kernel mode |
 | cpu_idle | jiffies | Idle time |
 | cpu_iowait | jiffies | Waiting for I/O |
+| cpu_irq | jiffies | Servicing interrupts |
+| cpu_softirq | jiffies | Servicing soft interrupts |
 
-### Process Metrics
+### Memory Fragmentation Metrics
 
 | Metric | Unit | Description |
 |--------|------|-------------|
-| {process}_VmRSS | kB | Resident memory |
-| {process}_VmSize | kB | Virtual memory size |
+| buddyinfo_{zone}_orders | - | Free pages per order for memory zone |
+
+### Process Metrics (Per Process)
+
+| Metric | Unit | Description |
+|--------|------|-------------|
+| {process}_{pid}_state | - | Process state (R/S/D/Z/T) |
+| {process}_{pid}_utime | jiffies | User CPU time |
+| {process}_{pid}_stime | jiffies | System CPU time |
+| {process}_{pid}_num_threads | - | Number of threads |
+| {process}_{pid}_vsize | bytes | Virtual memory size |
+| {process}_{pid}_rss | pages | Resident set size |
+| {process}_{pid}_VmRSS | kB | Resident memory |
+| {process}_{pid}_VmSize | kB | Virtual memory size |
+| {process}_{pid}_VmPeak | kB | Peak virtual memory |
+| {process}_{pid}_VmHWM | kB | Peak resident memory |
+| {process}_{pid}_Pss | kB | Proportional set size |
+| {process}_{pid}_Private_Clean | kB | Private clean memory |
+| {process}_{pid}_Private_Dirty | kB | Private dirty memory |
+| {process}_{pid}_Shared_Clean | kB | Shared clean memory |
+| {process}_{pid}_Shared_Dirty | kB | Shared dirty memory |
 
 ## Output Examples
 
@@ -267,12 +271,26 @@ Machine-readable JSON format for integration:
   "location": "rack1A",
   "timestamp": "2026-02-07 10:30:00",
   "metrics": {
-    "system_memory": [
+    "system_metrics": [
       {
         "name": "MemTotal",
         "value": "8192000",
         "unit": "kB",
         "description": "Total system memory"
+      },
+      {
+        "name": "cpu_user",
+        "value": "12345",
+        "unit": "jiffies",
+        "description": "User mode CPU time"
+      }
+    ],
+    "process_metrics": [
+      {
+        "name": "nginx_1234_VmRSS",
+        "value": "45678",
+        "unit": "kB",
+        "description": "Resident memory"
       }
     ]
   }
@@ -285,7 +303,8 @@ Flat CSV format for spreadsheet analysis:
 
 ```csv
 Device ID,Location,Timestamp,Plugin,Metric Name,Value,Unit,Description
-device-1234,rack1A,2026-02-07 10:30:00,system_memory,MemTotal,8192000,kB,Total system memory
+device-1234,rack1A,2026-02-07 10:30:00,system_metrics,MemTotal,8192000,kB,Total system memory
+device-1234,rack1A,2026-02-07 10:30:00,process_metrics,nginx_1234_VmRSS,45678,kB,Resident memory
 ```
 
 ## Extending perfSight

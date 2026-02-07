@@ -15,7 +15,7 @@ perfSight/
 ├── perfsight.conf.yaml               # Sample configuration file
 ├── .gitignore                        # Git ignore rules
 │
-├── include/                          # Header files (13 files)
+├── include/                          # Header files (14 files)
 │   ├── core/                         # Core system headers
 │   │   ├── Agent.hpp                 # Main agent orchestrator
 │   │   ├── ConfigManager.hpp         # YAML config parser
@@ -24,8 +24,8 @@ perfSight/
 │   │   └── PluginLoader.hpp          # Plugin management
 │   ├── plugins/                      # Metric plugin interfaces
 │   │   ├── IMetricPlugin.hpp         # Plugin base interface
-│   │   ├── ProcMetricsPlugin.hpp     # /proc metrics collector
-│   │   ├── SoCMetricsPlugin.hpp      # SoC-specific metrics
+│   │   ├── SystemMetricsPlugin.hpp   # System-wide metrics collector
+│   │   ├── ProcMetricsPlugin.hpp     # Per-process metrics collector
 │   │   └── ContainerMetricsPlugin.hpp # Container metrics (cgroup)
 │   └── exporters/                    # Output exporter interfaces
 │       ├── IExporter.hpp             # Exporter base interface
@@ -33,7 +33,7 @@ perfSight/
 │       ├── JSONExporter.hpp          # JSON output
 │       └── CSVExporter.hpp           # CSV output
 │
-├── src/                              # Implementation files (10 files)
+├── src/                              # Implementation files (12 files)
 │   ├── main.cpp                      # Entry point
 │   ├── core/                         # Core implementations
 │   │   ├── Agent.cpp                 # Main agent logic
@@ -41,8 +41,8 @@ perfSight/
 │   │   ├── MetricsAggregator.cpp     # Metric aggregation
 │   │   └── PluginLoader.cpp          # Plugin loading
 │   ├── plugins/                      # Plugin implementations
-│   │   ├── ProcMetricsPlugin.cpp     # System/process metrics
-│   │   ├── SoCMetricsPlugin.cpp      # GPU/CMA/bandwidth metrics
+│   │   ├── SystemMetricsPlugin.cpp   # System-wide metrics
+│   │   ├── ProcMetricsPlugin.cpp     # Per-process metrics
 │   │   └── ContainerMetricsPlugin.cpp # Container monitoring
 │   └── exporters/                    # Exporter implementations
 │       ├── HTMLExporter.cpp          # HTML generation
@@ -69,20 +69,19 @@ perfSight/
 
 ### Metric Plugins (3 Implemented)
 
-#### 1. ProcMetricsPlugin
-Collects system and process metrics from `/proc` filesystem:
-- System memory (MemTotal, MemFree, MemAvailable, Buffers, Cached, Swap)
-- Process memory (VmRSS, VmSize per process)
-- CPU usage (User, System, Idle, I/O wait)
+#### 1. SystemMetricsPlugin
+Collects system-wide metrics from `/proc` filesystem:
+- System memory (from `/proc/meminfo`): MemTotal, MemFree, MemAvailable, Buffers, Cached, Swap
+- CPU usage (from `/proc/stat`): User, System, Nice, Idle, I/O wait, IRQ, Soft IRQ
+- Memory fragmentation (from `/proc/buddyinfo`): Free pages per order for each zone
+
+#### 2. ProcMetricsPlugin
+Collects per-process metrics from `/proc/[pid]/` filesystem:
+- Process stats (from `/proc/[pid]/stat`): State, CPU times, thread count, virtual/resident memory
+- Process status (from `/proc/[pid]/status`): VmRSS, VmSize, VmPeak, VmHWM
+- Memory maps (from `/proc/[pid]/smaps`): PSS, Private/Shared Clean/Dirty memory
 - Process whitelist filtering
 - Kernel thread inclusion option
-
-#### 2. SoCMetricsPlugin
-Collects SoC-specific hardware metrics:
-- GPU memory usage (Amlogic, Broadcom, Realtek support)
-- CMA (Contiguous Memory Allocator) regions
-- Memory bandwidth monitoring
-- SoC-specific sysfs/debugfs paths
 
 #### 3. ContainerMetricsPlugin
 Monitors container resource usage:
@@ -141,6 +140,7 @@ agent:
   location: "rack1A"                    # Physical location
   log_level: "INFO"                     # Logging level
   collection_interval_seconds: 30       # Collection frequency
+  collection_iteration: 0               # Number of iterations (0 = run indefinitely)
   max_parallel_plugins: 4               # Concurrency limit
   reliability:
     restart_plugins_on_failure: true    # Auto-restart
@@ -151,12 +151,12 @@ agent:
 Easy enable/disable of metrics with plugin-specific parameters:
 ```yaml
 metrics:
-  - name: system_memory
+  - name: system_metrics
     enabled: true
-    plugin: proc
+    plugin: system
     params: {}
     
-  - name: process_memory
+  - name: process_metrics
     enabled: true
     plugin: proc
     params:
