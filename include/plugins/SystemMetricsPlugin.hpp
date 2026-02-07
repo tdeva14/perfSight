@@ -6,19 +6,17 @@ namespace perfsight {
 namespace plugins {
 
 /**
- * @brief Plugin for collecting SoC-specific metrics
+ * @brief Plugin for collecting system-wide metrics from /proc filesystem
  * 
  * Collects:
- * - GPU memory usage
- * - CMA (Contiguous Memory Allocator) regions
- * - Memory bandwidth (SoC-specific)
- * 
- * Supports different SoC types: amlogic, broadcom, realtek
+ * - System memory (from /proc/meminfo)
+ * - CPU usage (from /proc/stat)
+ * - Memory fragmentation (from /proc/buddyinfo)
  */
-class SoCMetricsPlugin : public IMetricPlugin {
+class SystemMetricsPlugin : public IMetricPlugin {
 public:
-    SoCMetricsPlugin(const std::string& metricName);
-    ~SoCMetricsPlugin() override = default;
+    SystemMetricsPlugin(const std::string& metricName);
+    ~SystemMetricsPlugin() override = default;
 
     bool initialize(const PluginParams& params) override;
     MetricData collectMetrics() override;
@@ -28,17 +26,15 @@ public:
 
 private:
     std::string metricName_;
-    std::string socType_;
     bool healthy_;
     
     // Metric collection methods
-    MetricData collectGPUMemory();
-    MetricData collectCMARegions();
-    MetricData collectMemoryBandwidth();
+    MetricData collectSystemMemory();
+    MetricData collectCPUUsage();
+    MetricData collectBuddyInfo();
     
     // Helper methods
     std::string readFile(const std::string& path);
-    std::string getSoCSpecificPath(const std::string& metric);
 };
 
 } // namespace plugins

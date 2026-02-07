@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     
     // Initialize logger
     auto& logger = perfsight::core::Logger::getInstance();
-    logger.init("/var/log/perfsight/perfsight.log");
+    logger.init("/tmp/perfsight/logs/perfsight.log");
     
     logger.info("=================================================");
     logger.info("       perfSight - Performance Monitor");

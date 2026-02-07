@@ -7,13 +7,12 @@ namespace perfsight {
 namespace plugins {
 
 /**
- * @brief Plugin for collecting /proc-based system metrics
+ * @brief Plugin for collecting per-process metrics from /proc filesystem
  * 
  * Collects:
- * - System memory (from /proc/meminfo)
- * - Process memory (from /proc/<pid>/status)
- * - CPU usage (from /proc/stat)
- * - Swap usage
+ * - Process stats (from /proc/[pid]/stat)
+ * - Process memory maps (from /proc/[pid]/smaps)
+ * - Process status (from /proc/[pid]/status)
  */
 class ProcMetricsPlugin : public IMetricPlugin {
 public:
@@ -35,14 +34,15 @@ private:
     bool includeKernelThreads_;
     
     // Metric collection methods
-    MetricData collectSystemMemory();
-    MetricData collectProcessMemory();
-    MetricData collectCPUUsage();
+    MetricData collectProcessMetrics();
     
     // Helper methods
     std::string readFile(const std::string& path);
     std::vector<std::string> getProcessList();
     bool isProcessInWhitelist(const std::string& processName);
+    void parseProcessStat(const std::string& pid, const std::string& processName, MetricData& metrics);
+    void parseProcessStatus(const std::string& pid, const std::string& processName, MetricData& metrics);
+    void parseProcessSmaps(const std::string& pid, const std::string& processName, MetricData& metrics);
 };
 
 } // namespace plugins

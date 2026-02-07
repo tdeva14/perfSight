@@ -47,13 +47,7 @@ MetricData ProcMetricsPlugin::collectMetrics() {
     MetricData metrics;
 
     try {
-        if (metricName_ == "system_memory") {
-            metrics = collectSystemMemory();
-        } else if (metricName_ == "process_memory") {
-            metrics = collectProcessMemory();
-        } else if (metricName_ == "cpu_usage") {
-            metrics = collectCPUUsage();
-        }
+        metrics = collectProcessMetrics();
     } catch (const std::exception& e) {
         core::Logger::getInstance().error("Exception in ProcMetricsPlugin: ", e.what());
         healthy_ = false;
@@ -62,44 +56,12 @@ MetricData ProcMetricsPlugin::collectMetrics() {
     return metrics;
 }
 
-MetricData ProcMetricsPlugin::collectSystemMemory() {
-    MetricData metrics;
-    std::string meminfo = readFile("/proc/meminfo");
-    std::istringstream iss(meminfo);
-    std::string line;
-
-    while (std::getline(iss, line)) {
-        std::istringstream lineStream(line);
-        std::string key, value, unit;
-        lineStream >> key >> value >> unit;
-
-        if (key == "MemTotal:") {
-            metrics.push_back(MetricValue("MemTotal", value, "kB", "Total system memory"));
-        } else if (key == "MemFree:") {
-            metrics.push_back(MetricValue("MemFree", value, "kB", "Free system memory"));
-        } else if (key == "MemAvailable:") {
-            metrics.push_back(MetricValue("MemAvailable", value, "kB", "Available system memory"));
-        } else if (key == "Buffers:") {
-            metrics.push_back(MetricValue("Buffers", value, "kB", "Buffer cache"));
-        } else if (key == "Cached:") {
-            metrics.push_back(MetricValue("Cached", value, "kB", "Page cache"));
-        } else if (key == "SwapTotal:") {
-            metrics.push_back(MetricValue("SwapTotal", value, "kB", "Total swap space"));
-        } else if (key == "SwapFree:") {
-            metrics.push_back(MetricValue("SwapFree", value, "kB", "Free swap space"));
-        }
-    }
-
-    return metrics;
-}
-
-MetricData ProcMetricsPlugin::collectProcessMemory() {
+MetricData ProcMetricsPlugin::collectProcessMetrics() {
     MetricData metrics;
     auto processList = getProcessList();
 
     for (const auto& pid : processList) {
         try {
-            std::string statusPath = "/proc/" + pid + "/status";
             std::string cmdlinePath = "/proc/" + pid + "/cmdline";
             
             // Read process name
@@ -117,30 +79,11 @@ MetricData ProcMetricsPlugin::collectProcessMemory() {
             // Check whitelist
             if (!isProcessInWhitelist(processName)) continue;
 
-            // Read memory stats
-            std::string status = readFile(statusPath);
-            std::istringstream iss(status);
-            std::string line;
+            // Collect metrics from different sources
+            parseProcessStat(pid, processName, metrics);
+            parseProcessStatus(pid, processName, metrics);
+            parseProcessSmaps(pid, processName, metrics);
             
-            while (std::getline(iss, line)) {
-                if (line.find("VmRSS:") == 0) {
-                    std::istringstream lineStream(line);
-                    std::string key, value, unit;
-                    lineStream >> key >> value >> unit;
-                    
-                    std::string metricName = processName + "_VmRSS_" + pid;
-                    metrics.push_back(MetricValue(metricName, value, unit, 
-                                                 "Resident memory for " + processName));
-                } else if (line.find("VmSize:") == 0) {
-                    std::istringstream lineStream(line);
-                    std::string key, value, unit;
-                    lineStream >> key >> value >> unit;
-                    
-                    std::string metricName = processName + "_VmSize_" + pid;
-                    metrics.push_back(MetricValue(metricName, value, unit, 
-                                                 "Virtual memory for " + processName));
-                }
-            }
         } catch (...) {
             // Process may have exited, continue
         }
@@ -149,25 +92,124 @@ MetricData ProcMetricsPlugin::collectProcessMemory() {
     return metrics;
 }
 
-MetricData ProcMetricsPlugin::collectCPUUsage() {
-    MetricData metrics;
-    std::string stat = readFile("/proc/stat");
-    std::istringstream iss(stat);
-    std::string line;
-
-    std::getline(iss, line); // First line is overall CPU
-    std::istringstream lineStream(line);
-    std::string cpu;
-    long user, nice, system, idle, iowait, irq, softirq;
+void ProcMetricsPlugin::parseProcessStat(const std::string& pid, const std::string& processName, MetricData& metrics) {
+    std::string statPath = "/proc/" + pid + "/stat";
+    std::string stat = readFile(statPath);
     
-    lineStream >> cpu >> user >> nice >> system >> idle >> iowait >> irq >> softirq;
+    if (stat.empty()) return;
+    
+    std::istringstream iss(stat);
+    std::string pidStr, comm, state;
+    long ppid = 0, pgrp = 0, session = 0, tty_nr = 0, tpgid = 0, flags = 0;
+    unsigned long minflt = 0, cminflt = 0, majflt = 0, cmajflt = 0, utime = 0, stime = 0;
+    long cutime = 0, cstime = 0, priority = 0, nice = 0, num_threads = 0, itrealvalue = 0;
+    unsigned long long starttime = 0, vsize = 0;
+    long rss = 0;
+    
+    // Parse stat file (man proc)
+    iss >> pidStr >> comm >> state >> ppid >> pgrp >> session >> tty_nr >> tpgid 
+        >> flags >> minflt >> cminflt >> majflt >> cmajflt >> utime >> stime
+        >> cutime >> cstime >> priority >> nice >> num_threads >> itrealvalue
+        >> starttime >> vsize >> rss;
+    
+    // Only create metrics if parsing was successful
+    if (!iss.fail() || iss.eof()) {
+        std::string prefix = processName + "_" + pid;
+        
+        metrics.push_back(MetricValue(prefix + "_state", state, "", "Process state"));
+        metrics.push_back(MetricValue(prefix + "_utime", std::to_string(utime), "jiffies", "User CPU time"));
+        metrics.push_back(MetricValue(prefix + "_stime", std::to_string(stime), "jiffies", "System CPU time"));
+        metrics.push_back(MetricValue(prefix + "_num_threads", std::to_string(num_threads), "", "Number of threads"));
+        metrics.push_back(MetricValue(prefix + "_vsize", std::to_string(vsize), "bytes", "Virtual memory size"));
+        metrics.push_back(MetricValue(prefix + "_rss", std::to_string(rss), "pages", "Resident set size"));
+    }
+}
 
-    metrics.push_back(MetricValue("cpu_user", std::to_string(user), "jiffies", "User mode CPU time"));
-    metrics.push_back(MetricValue("cpu_system", std::to_string(system), "jiffies", "System mode CPU time"));
-    metrics.push_back(MetricValue("cpu_idle", std::to_string(idle), "jiffies", "Idle CPU time"));
-    metrics.push_back(MetricValue("cpu_iowait", std::to_string(iowait), "jiffies", "I/O wait time"));
+void ProcMetricsPlugin::parseProcessStatus(const std::string& pid, const std::string& processName, MetricData& metrics) {
+    std::string statusPath = "/proc/" + pid + "/status";
+    std::string status = readFile(statusPath);
+    
+    if (status.empty()) return;
+    
+    std::istringstream iss(status);
+    std::string line;
+    std::string prefix = processName + "_" + pid;
+    
+    while (std::getline(iss, line)) {
+        if (line.find("VmRSS:") == 0) {
+            std::istringstream lineStream(line);
+            std::string key, value, unit;
+            lineStream >> key >> value >> unit;
+            metrics.push_back(MetricValue(prefix + "_VmRSS", value, unit, "Resident memory"));
+        } else if (line.find("VmSize:") == 0) {
+            std::istringstream lineStream(line);
+            std::string key, value, unit;
+            lineStream >> key >> value >> unit;
+            metrics.push_back(MetricValue(prefix + "_VmSize", value, unit, "Virtual memory size"));
+        } else if (line.find("VmPeak:") == 0) {
+            std::istringstream lineStream(line);
+            std::string key, value, unit;
+            lineStream >> key >> value >> unit;
+            metrics.push_back(MetricValue(prefix + "_VmPeak", value, unit, "Peak virtual memory"));
+        } else if (line.find("VmHWM:") == 0) {
+            std::istringstream lineStream(line);
+            std::string key, value, unit;
+            lineStream >> key >> value >> unit;
+            metrics.push_back(MetricValue(prefix + "_VmHWM", value, unit, "Peak resident memory"));
+        }
+    }
+}
 
-    return metrics;
+void ProcMetricsPlugin::parseProcessSmaps(const std::string& pid, const std::string& processName, MetricData& metrics) {
+    std::string smapsPath = "/proc/" + pid + "/smaps";
+    std::string smaps = readFile(smapsPath);
+    
+    if (smaps.empty()) return;
+    
+    std::istringstream iss(smaps);
+    std::string line;
+    std::string prefix = processName + "_" + pid;
+    
+    long totalPss = 0;
+    long totalPrivateClean = 0;
+    long totalPrivateDirty = 0;
+    long totalSharedClean = 0;
+    long totalSharedDirty = 0;
+    
+    while (std::getline(iss, line)) {
+        if (line.find("Pss:") == 0) {
+            std::istringstream lineStream(line);
+            std::string key, value;
+            lineStream >> key >> value;
+            totalPss += std::stol(value);
+        } else if (line.find("Private_Clean:") == 0) {
+            std::istringstream lineStream(line);
+            std::string key, value;
+            lineStream >> key >> value;
+            totalPrivateClean += std::stol(value);
+        } else if (line.find("Private_Dirty:") == 0) {
+            std::istringstream lineStream(line);
+            std::string key, value;
+            lineStream >> key >> value;
+            totalPrivateDirty += std::stol(value);
+        } else if (line.find("Shared_Clean:") == 0) {
+            std::istringstream lineStream(line);
+            std::string key, value;
+            lineStream >> key >> value;
+            totalSharedClean += std::stol(value);
+        } else if (line.find("Shared_Dirty:") == 0) {
+            std::istringstream lineStream(line);
+            std::string key, value;
+            lineStream >> key >> value;
+            totalSharedDirty += std::stol(value);
+        }
+    }
+    
+    metrics.push_back(MetricValue(prefix + "_Pss", std::to_string(totalPss), "kB", "Proportional set size"));
+    metrics.push_back(MetricValue(prefix + "_Private_Clean", std::to_string(totalPrivateClean), "kB", "Private clean memory"));
+    metrics.push_back(MetricValue(prefix + "_Private_Dirty", std::to_string(totalPrivateDirty), "kB", "Private dirty memory"));
+    metrics.push_back(MetricValue(prefix + "_Shared_Clean", std::to_string(totalSharedClean), "kB", "Shared clean memory"));
+    metrics.push_back(MetricValue(prefix + "_Shared_Dirty", std::to_string(totalSharedDirty), "kB", "Shared dirty memory"));
 }
 
 std::string ProcMetricsPlugin::readFile(const std::string& path) {

@@ -31,9 +31,9 @@ install_manifest.txt
 *.json
 *.csv
 
-# Core dumps
-core
-core.*
+# Core dumps (not the src/core or include/core directories)
+/core
+/core.*
 
 # Dependency directories
 lib/
