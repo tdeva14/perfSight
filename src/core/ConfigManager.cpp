@@ -160,9 +160,11 @@ std::string ConfigManager::extractValue(const std::string& line) {
     
     std::string value = trim(line.substr(colonPos + 1));
     
-    // Remove quotes if present
-    if (!value.empty() && (value.front() == '"' || value.front() == '\'')) {
-        value = value.substr(1, value.length() - 2);
+    // Remove quotes if present (and value has at least 2 characters for opening and closing quotes)
+    if (value.length() >= 2 && (value.front() == '"' || value.front() == '\'')) {
+        if (value.back() == value.front()) {
+            value = value.substr(1, value.length() - 2);
+        }
     }
     
     return value;

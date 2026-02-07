@@ -100,11 +100,11 @@ void ProcMetricsPlugin::parseProcessStat(const std::string& pid, const std::stri
     
     std::istringstream iss(stat);
     std::string pidStr, comm, state;
-    long ppid, pgrp, session, tty_nr, tpgid, flags;
-    unsigned long minflt, cminflt, majflt, cmajflt, utime, stime;
-    long cutime, cstime, priority, nice, num_threads, itrealvalue;
-    unsigned long long starttime, vsize;
-    long rss;
+    long ppid = 0, pgrp = 0, session = 0, tty_nr = 0, tpgid = 0, flags = 0;
+    unsigned long minflt = 0, cminflt = 0, majflt = 0, cmajflt = 0, utime = 0, stime = 0;
+    long cutime = 0, cstime = 0, priority = 0, nice = 0, num_threads = 0, itrealvalue = 0;
+    unsigned long long starttime = 0, vsize = 0;
+    long rss = 0;
     
     // Parse stat file (man proc)
     iss >> pidStr >> comm >> state >> ppid >> pgrp >> session >> tty_nr >> tpgid 
@@ -112,14 +112,17 @@ void ProcMetricsPlugin::parseProcessStat(const std::string& pid, const std::stri
         >> cutime >> cstime >> priority >> nice >> num_threads >> itrealvalue
         >> starttime >> vsize >> rss;
     
-    std::string prefix = processName + "_" + pid;
-    
-    metrics.push_back(MetricValue(prefix + "_state", state, "", "Process state"));
-    metrics.push_back(MetricValue(prefix + "_utime", std::to_string(utime), "jiffies", "User CPU time"));
-    metrics.push_back(MetricValue(prefix + "_stime", std::to_string(stime), "jiffies", "System CPU time"));
-    metrics.push_back(MetricValue(prefix + "_num_threads", std::to_string(num_threads), "", "Number of threads"));
-    metrics.push_back(MetricValue(prefix + "_vsize", std::to_string(vsize), "bytes", "Virtual memory size"));
-    metrics.push_back(MetricValue(prefix + "_rss", std::to_string(rss), "pages", "Resident set size"));
+    // Only create metrics if parsing was successful
+    if (!iss.fail() || iss.eof()) {
+        std::string prefix = processName + "_" + pid;
+        
+        metrics.push_back(MetricValue(prefix + "_state", state, "", "Process state"));
+        metrics.push_back(MetricValue(prefix + "_utime", std::to_string(utime), "jiffies", "User CPU time"));
+        metrics.push_back(MetricValue(prefix + "_stime", std::to_string(stime), "jiffies", "System CPU time"));
+        metrics.push_back(MetricValue(prefix + "_num_threads", std::to_string(num_threads), "", "Number of threads"));
+        metrics.push_back(MetricValue(prefix + "_vsize", std::to_string(vsize), "bytes", "Virtual memory size"));
+        metrics.push_back(MetricValue(prefix + "_rss", std::to_string(rss), "pages", "Resident set size"));
+    }
 }
 
 void ProcMetricsPlugin::parseProcessStatus(const std::string& pid, const std::string& processName, MetricData& metrics) {

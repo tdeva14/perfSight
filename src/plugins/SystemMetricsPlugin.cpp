@@ -85,14 +85,13 @@ MetricData SystemMetricsPlugin::collectCPUUsage() {
     std::getline(iss, line); // First line is overall CPU
     std::istringstream lineStream(line);
     std::string cpu;
-    long user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
+    long user = 0, nice = 0, system = 0, idle = 0, iowait = 0, irq = 0, softirq = 0;
+    long steal = 0, guest = 0, guest_nice = 0;
     
     lineStream >> cpu >> user >> nice >> system >> idle >> iowait >> irq >> softirq;
     
     // Try to read steal, guest, guest_nice (may not exist on all systems)
-    if (lineStream >> steal) {
-        lineStream >> guest >> guest_nice;
-    }
+    lineStream >> steal >> guest >> guest_nice;
 
     metrics.push_back(MetricValue("cpu_user", std::to_string(user), "jiffies", "User mode CPU time"));
     metrics.push_back(MetricValue("cpu_nice", std::to_string(nice), "jiffies", "Nice user mode CPU time"));
