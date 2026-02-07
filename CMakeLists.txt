@@ -29,8 +29,8 @@ set(CORE_SOURCES
 
 # Source files - Plugins
 set(PLUGIN_SOURCES
+    src/plugins/SystemMetricsPlugin.cpp
     src/plugins/ProcMetricsPlugin.cpp
-    src/plugins/SoCMetricsPlugin.cpp
     src/plugins/ContainerMetricsPlugin.cpp
 )
 
