@@ -2,7 +2,7 @@
 
 **Lightweight, Modular Performance Monitoring Tool for Embedded Systems**
 
-perfSight is a professional-grade, plugin-based performance monitoring solution designed for embedded devices and resource-constrained systems. It provides real-time metric collection with support for multiple output formats and future cloud integration capabilities.
+perfSight is a plugin-based performance monitoring solution designed for embedded devices and resource-constrained systems. It provides real-time metric collection with support for multiple output formats and future cloud integration capabilities.
 
 ## Features
 
@@ -19,10 +19,10 @@ perfSight is a professional-grade, plugin-based performance monitoring solution 
 perfSight follows a modular, plugin-based architecture:
 
 ```
-┌─────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────-┐
 │                  perfSight Agent                     │
-├─────────────────────────────────────────────────────┤
-│  Config Manager  │  Plugin Loader  │  Scheduler     │
+├──────────────────────────────────────────────────────┤
+│  Config Manager  │  Plugin Loader   │  Scheduler     │
 ├──────────────────┴──────────────────┴────────────────┤
 │                Metrics Aggregator                    │
 ├──────────────────────────────────────────────────────┤
@@ -468,5 +468,3 @@ For issues, questions, or contributions:
 - Examples: See `/examples` directory
 
 ---
-
-**perfSight** - Professional performance monitoring for embedded systems
